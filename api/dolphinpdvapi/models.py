@@ -1,4 +1,4 @@
-from app import database
+from dolphinpdvapi import database
 from datetime import datetime
 
 class Usuario(database.Model):
