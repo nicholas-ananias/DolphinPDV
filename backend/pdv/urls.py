@@ -18,6 +18,8 @@ urlpatterns = [
     # Produtos
     path('products/manage/', views.manage_product),
     path('products/manage/<int:product_id>/', views.manage_product),
+    path('products/barcode/', views.product_by_barcode),  # POST
+    path('products/barcode/<str:barcode>/', views.product_by_barcode),  # GET, PUT, DELETE
     
     # Relatórios
     path('reports/sales/', views.sales_report),

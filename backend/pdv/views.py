@@ -212,38 +212,129 @@ def get_inventory(request):
 # Gestão de Produtos
 @csrf_exempt
 def manage_product(request, product_id=None):
-    if request.method == 'GET':
-        product = Product.objects.get(id=product_id)
-        return JsonResponse({
-            'id': product.id,
-            'name': product.name,
-            'price': str(product.price),
-            'barcode': product.barcode,
-            'category_id': product.category.id
-        })
-    
-    elif request.method == 'POST':
-        data = json.loads(request.body)
-        if product_id:  # Edição
+    try:
+        if request.method == 'GET':
             product = Product.objects.get(id=product_id)
-            product.name = data['name']
-            product.price = data['price']
-            product.barcode = data.get('barcode')
-            product.category_id = data['category_id']
-            product.save()
-        else:  # Criação
+            return JsonResponse({
+                'id': product.id,
+                'name': product.name,
+                'price': str(product.price),
+                'barcode': product.barcode,
+                'category_id': product.category.id
+            })
+    
+        elif request.method == 'POST':
+            data = json.loads(request.body)
+            if product_id:  # Edição
+                product = Product.objects.get(id=product_id)
+                product.name = data['name']
+                product.price = data['price']
+                product.barcode = data.get('barcode')
+                product.category_id = data['category_id']
+                product.save()
+            else:  # Criação
+                product = Product.objects.create(
+                    name=data['name'],
+                    price=data['price'],
+                    barcode=data.get('barcode'),
+                    category_id=data['category_id']
+                )
+            return JsonResponse({'status': 'success', 'product_id': product.id})
+        
+        elif request.method == 'DELETE':
+            product = Product.objects.get(id=product_id)
+            product.delete()
+            return JsonResponse({'status': 'success'})
+
+    except Product.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Produto não encontrado'
+        }, status=404)
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error', 
+            'message': str(e)
+        }, status=400)
+
+@csrf_exempt
+def product_by_barcode(request, barcode=None):
+    try:
+        # GET - Buscar produto por código de barras
+        if request.method == 'GET':
+            product = Product.objects.get(barcode=barcode)
+            return JsonResponse({
+                'id': product.id,
+                'name': product.name,
+                'price': str(product.price),
+                'barcode': product.barcode,
+                'category_id': product.category.id,
+                'category_name': product.category.name
+            })
+        
+        # POST - Criar novo produto com código de barras
+        elif request.method == 'POST':
+            data = json.loads(request.body)
+            
+            if Product.objects.filter(barcode=data['barcode']).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Código de barras já existe'
+                }, status=400)
+                
             product = Product.objects.create(
                 name=data['name'],
                 price=data['price'],
-                barcode=data.get('barcode'),
+                barcode=data['barcode'],
                 category_id=data['category_id']
             )
-        return JsonResponse({'status': 'success', 'product_id': product.id})
+            
+            return JsonResponse({
+                'status': 'success',
+                'barcode': product.barcode,
+                'product_id': product.id
+            })
+        
+        # PUT - Atualizar produto por código de barras
+        elif request.method == 'PUT':
+            data = json.loads(request.body)
+            product = Product.objects.get(barcode=barcode)
+            
+            product.name = data.get('name', product.name)
+            product.price = data.get('price', product.price)
+            product.category_id = data.get('category_id', product.category.id)
+            product.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'barcode': product.barcode
+            })
+        
+        # DELETE - Remover produto por código de barras
+        elif request.method == 'DELETE':
+            product = Product.objects.get(barcode=barcode)
+            
+            if SaleItem.objects.filter(product=product).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Produto possui vendas associadas'
+                }, status=400)
+                
+            product.delete()
+            return JsonResponse({'status': 'success'})
     
-    elif request.method == 'DELETE':
-        product = Product.objects.get(id=product_id)
-        product.delete()
-        return JsonResponse({'status': 'success'})
+    except Product.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Produto não encontrado'
+        }, status=404)
+    
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=400)
 
 # Relatórios
 def sales_report(request):
@@ -313,46 +404,53 @@ def inventory_report(request):
 # Dados auxiliares
 @csrf_exempt
 def manage_category(request, category_id=None):
-    if request.method == 'GET':
-        # Detalhes de uma categoria específica
-        category = Category.objects.get(id=category_id)
-        return JsonResponse({
-            'id': category.id,
-            'name': category.name
-        })
-    
-    elif request.method == 'POST':
-        # Criar nova categoria
-        data = json.loads(request.body)
-        category = Category.objects.create(name=data['name'])
-        return JsonResponse({
-            'status': 'success',
-            'category_id': category.id
-        })
-    
-    elif request.method == 'PUT':
-        # Atualizar categoria existente
-        data = json.loads(request.body)
-        category = Category.objects.get(id=category_id)
-        category.name = data['name']
-        category.save()
-        return JsonResponse({
-            'status': 'success',
-            'category_id': category.id
-        })
-    
-    elif request.method == 'DELETE':
-        # Remover categoria (com validação de produtos associados)
-        category = Category.objects.get(id=category_id)
-        
-        if Product.objects.filter(category=category).exists():
+    try:
+        if request.method == 'GET':
+            category = Category.objects.get(id=category_id)
             return JsonResponse({
-                'status': 'error',
-                'message': 'Não é possível excluir categoria com produtos associados'
-            }, status=400)
+                'id': category.id,
+                'name': category.name
+            })
+    
+        elif request.method == 'POST':
+            # Criar nova categoria
+            data = json.loads(request.body)
+            category = Category.objects.create(name=data['name'])
+            return JsonResponse({
+                'status': 'success',
+                'category_id': category.id
+            })
+        
+        elif request.method == 'PUT':
+            # Atualizar categoria existente
+            data = json.loads(request.body)
+            category = Category.objects.get(id=category_id)
+            category.name = data['name']
+            category.save()
+            return JsonResponse({
+                'status': 'success',
+                'category_id': category.id
+            })
+        
+        elif request.method == 'DELETE':
+            # Remover categoria (com validação de produtos associados)
+            category = Category.objects.get(id=category_id)
             
-        category.delete()
-        return JsonResponse({'status': 'success'})
+            if Product.objects.filter(category=category).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Não é possível excluir categoria com produtos associados'
+                }, status=400)
+                
+            category.delete()
+            return JsonResponse({'status': 'success'})
+
+    except Category.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Categoria não encontrada'
+        }, status=404)
+
 
 @csrf_exempt
 def list_categories(request):
@@ -362,46 +460,52 @@ def list_categories(request):
 
 @csrf_exempt
 def manage_payment_method(request, method_id=None):
-    if request.method == 'GET':
-        # Detalhes de um método específico
-        method = PaymentMethod.objects.get(id=method_id)
-        return JsonResponse({
-            'id': method.id,
-            'name': method.name
-        })
-    
-    elif request.method == 'POST':
-        # Criar novo método
-        data = json.loads(request.body)
-        method = PaymentMethod.objects.create(name=data['name'])
-        return JsonResponse({
-            'status': 'success',
-            'method_id': method.id
-        })
-    
-    elif request.method == 'PUT':
-        # Atualizar método existente
-        data = json.loads(request.body)
-        method = PaymentMethod.objects.get(id=method_id)
-        method.name = data['name']
-        method.save()
-        return JsonResponse({
-            'status': 'success',
-            'method_id': method.id
-        })
-    
-    elif request.method == 'DELETE':
-        # Remover método (com validação de vendas associadas)
-        method = PaymentMethod.objects.get(id=method_id)
-        
-        if Sale.objects.filter(payment_method=method).exists():
+    try:
+        if request.method == 'GET':
+            method = PaymentMethod.objects.get(id=method_id)
             return JsonResponse({
-                'status': 'error',
-                'message': 'Não é possível excluir método com vendas associadas'
-            }, status=400)
+                'id': method.id,
+                'name': method.name
+            })
+    
+        elif request.method == 'POST':
+            # Criar novo método
+            data = json.loads(request.body)
+            method = PaymentMethod.objects.create(name=data['name'])
+            return JsonResponse({
+                'status': 'success',
+                'method_id': method.id
+            })
+        
+        elif request.method == 'PUT':
+            # Atualizar método existente
+            data = json.loads(request.body)
+            method = PaymentMethod.objects.get(id=method_id)
+            method.name = data['name']
+            method.save()
+            return JsonResponse({
+                'status': 'success',
+                'method_id': method.id
+            })
+        
+        elif request.method == 'DELETE':
+            # Remover método (com validação de vendas associadas)
+            method = PaymentMethod.objects.get(id=method_id)
             
-        method.delete()
-        return JsonResponse({'status': 'success'})
+            if Sale.objects.filter(payment_method=method).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Não é possível excluir método com vendas associadas'
+                }, status=400)
+                
+            method.delete()
+            return JsonResponse({'status': 'success'})
+    
+    except PaymentMethod.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Método de pagamento não encontrado'
+        }, status=404)
 
 @csrf_exempt
 def list_payment_methods(request):
