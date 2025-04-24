@@ -1,10 +1,11 @@
 from django.urls import path
 from . import views
+from .views import logout_view, login
 
 urlpatterns = [
     # Autenticação e token
-    path('login/', views.login),
-    path('logout/', views.logout),
+    path('login/', login, name='login'),
+    path('logout/', logout_view, name='logout'),
     path('token/check/', views.check_token),
     
     # PDV

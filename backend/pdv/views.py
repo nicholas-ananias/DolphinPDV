@@ -1,7 +1,9 @@
 from django.http import JsonResponse
 from django.utils import timezone
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, login as django_login
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.db.models import Sum, F, Count
 from datetime import datetime, timedelta
@@ -21,46 +23,70 @@ def login(request):
             user = authenticate(username=username, password=password)
             
             if user:
+                # Gera novo token
                 token = secrets.token_hex(20)
-                expires = timezone.now() + timedelta(hours=8)
-                
                 user.auth_token = token
-                user.token_expires = expires
+                user.token_expires = datetime.now() + timedelta(hours=8)
                 user.save()
                 
-                response = JsonResponse({
+                # Autentica o usuário na sessão do Django
+                django_login(request, user)
+                
+                return JsonResponse({
                     'status': 'success',
                     'token': token,
-                    'expires': expires.isoformat(),
                     'user': {
                         'username': user.username,
                         'name': user.name,
                         'is_admin': user.is_admin
                     }
                 })
-                
-                response['X-Token-Expires'] = expires.isoformat()
-                return response
             
-            return JsonResponse({'status': 'error', 'message': 'Credenciais inválidas'}, status=401)
-        
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Credenciais inválidas'
+            }, status=401)
+            
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
     
-    return JsonResponse({'status': 'error', 'message': 'Método não permitido'}, status=405)
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Método não permitido'
+    }, status=405)
 
 @csrf_exempt
-def logout(request):
-    if request.method == 'POST':
-        try:
-            user = request.user
-            user.auth_token = None
-            user.token_expires = None
-            user.save()
-            return JsonResponse({'status': 'success'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-    return JsonResponse({'status': 'error', 'message': 'Método não permitido'}, status=405)
+@require_POST
+def logout_view(request):
+    if not hasattr(request, 'user'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Requisição inválida'
+        }, status=400)
+    
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'status': 'error', 
+            'message': 'Usuário não autenticado'
+        }, status=401)
+    
+    try:
+        # Limpa o token do usuário
+        request.user.auth_token = None
+        request.user.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Logout realizado com sucesso'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
 
 @csrf_exempt
 def check_token(request):

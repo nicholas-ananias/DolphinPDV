@@ -27,7 +27,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+# Configurações de autenticação
+LOGIN_URL = '/api/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/api/login/'
 
 
 # Application definition
@@ -47,10 +50,10 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'pdv.middleware.TokenAuthMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'pdv.middleware.TokenAuthMiddleware',
 ]
 
 ROOT_URLCONF = 'dolphinpdv.urls'
